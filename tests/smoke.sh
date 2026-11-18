@@ -25,7 +25,12 @@ mkdir python-smoke
 cd python-smoke
 printf '[project]\nname = "smoke"\nversion = "0.0.1"\n' > pyproject.toml
 printf 'answer: int = 42\nprint(answer)\n' > main.py
+python3 -c 'import ssl, sqlite3, bz2, lzma, ctypes, readline, zlib'
+if [[ ${1:-} == --with-python ]]; then
+  python3 -c 'import tkinter; import compression.zstd'
+fi
 python3 -m venv .venv
+.venv/bin/python -m pip --version
 .venv/bin/python -m py_compile main.py
 ruff check main.py
 EXPECTED_LSP=basedpyright,ruff nvim --headless main.py '+lua dofile(vim.env.LAZYVIM_SMOKE_LUA)'

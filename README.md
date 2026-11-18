@@ -1,6 +1,6 @@
 # LazyVim для Rust, Go, Python и TypeScript
 
-Один установочный скрипт для **Debian/Ubuntu, Fedora и Arch Linux** (x86_64 / aarch64, glibc). Настройка окружения рассчитана на Bash и Zsh. Для Alpine/musl, NixOS и Fish скрипт не предназначен.
+Один установочный скрипт для **Linux Mint, Debian/Ubuntu, Fedora и Arch Linux** (x86_64 / aarch64, glibc). Linux Mint определяется явно по `ID=linuxmint` и использует APT; LMDE также направляется в APT-ветку. Настройка окружения рассчитана на Bash и Zsh. Для Alpine/musl, NixOS и Fish скрипт не предназначен.
 
 ## Запуск
 
@@ -14,11 +14,25 @@ bash install.sh
 
 Репозиторий приватный: для клонирования нужна авторизация GitHub. Можно скачать `install.sh` через сайт или использовать `gh repo clone whiterabbit1983/lazyvim-linux-setup`.
 
+По умолчанию скрипт **не скачивает и не собирает новый Python**: используется имеющийся интерпретатор. Системные пакеты Python, pip и venv устанавливаются/проверяются как зависимости; это не установка нового upstream-релиза. Ruff, BasedPyright и Python-дополнение LazyVim включены всегда.
+
 Для запуска без подтверждения:
 
 ```bash
 bash install.sh --yes
 ```
+
+Последний стабильный Python из официальных исходников устанавливается **только по флагу**:
+
+```bash
+bash install.sh --with-python
+# Или без подтверждения:
+bash install.sh --yes --with-python
+```
+
+Сборка Python занимает несколько минут или дольше. По умолчанию используются 2 параллельных задания; можно изменить их число: `PYTHON_BUILD_JOBS=4 bash install.sh --with-python`. Установленный таким образом Python становится пользовательским стандартным интерпретатором через mise, но не подменяет `/usr/bin/python3`.
+
+Без `--with-python` настройка Python в mise не изменяется. Если вы уже используете pyenv/mise/venv, скрипт не переключает вас принудительно на системный Python.
 
 После установки **откройте новый терминал** и выполните `nvim`. Для текущего Bash/Zsh можно загрузить пути вручную:
 
@@ -36,16 +50,25 @@ nvim
 | Редактор | Стабильный Neovim, LazyVim starter |
 | Rust | `rustup`, `rustc`, `cargo`, `rust-analyzer`, `rustfmt`, Clippy |
 | Go | Go, `gofmt`, `gopls`, `goimports`, `gofumpt`, `golangci-lint` |
-| Python | Python 3, pip, venv, `basedpyright`, `ruff` |
-| TypeScript / JavaScript | Node.js LTS, npm, TypeScript (`tsc`), `vtsls`, Prettier, ESLint language server |
+| Python | Имеющийся Python, pip/venv, `basedpyright`, `ruff`; новый Python — только с `--with-python` |
+| TypeScript / JavaScript | Последний стабильный Node.js Current, npm, TypeScript (`tsc`), `vtsls`, Prettier, ESLint language server |
 | Сборка зависимостей | C/C++ compiler, make, OpenSSL headers, pkg-config |
 | Neovim-плагины | Tree-sitter CLI, `stylua`, `shfmt`, Lua/JSON language servers |
 | Rust debugger | `codelldb` (его запрашивает Rust-дополнение LazyVim) |
 | Поиск и буфер обмена | `ripgrep`, `fd`, `xclip`; `wl-clipboard` в Wayland-сессии |
 
-Python — интерпретатор, а не отдельный компилятор вроде `rustc`. Скрипт устанавливает Python из репозитория дистрибутива. TypeScript-компилятор устанавливается глобально для пользователя; проекты могут и должны закреплять собственную версию TypeScript.
+### Откуда берутся версии и файлы
 
-Node.js и Go устанавливаются через **mise**, Rust — через **rustup**, остальные языковые инструменты — через **Mason**. `sudo npm` и установка Python-пакетов в системное окружение не используются.
+- **Rust:** последний `stable` через официальный rustup; явно выполняется `rustup update stable`.
+- **Go:** последний стабильный релиз из `https://go.dev/dl/?mode=json`; mise устанавливает соответствующую официальную сборку Go.
+- **Node.js:** последний стабильный релиз из `https://nodejs.org/dist/index.json`; mise устанавливает официальную сборку. Это **Current, не обязательно LTS**. Nightly/RC исключаются.
+- **Python, только `--with-python`:** версия определяется по `https://www.python.org/downloads/source/`. Mise использует python-build с `MISE_PYTHON_COMPILE=true` и `PYTHON_BUILD_SKIP_MIRROR=1`: новые установки собираются из исходников python.org, а не из сторонних standalone-сборок. Если выбранная версия уже установлена в mise, она переиспользуется.
+- **TypeScript:** официальный пакет `typescript@latest` из `https://registry.npmjs.org`; не `next` и не nightly.
+- **C/C++ и библиотеки сборки:** пакеты Linux-дистрибутива, как и остальные системные зависимости.
+
+При изменении формата upstream-данных скрипт останавливается с ошибкой вместо молчаливого выбора старой версии. Последние версии не зафиксированы и со временем меняются; совместимость конкретных проектов с новым major-релизом не гарантируется.
+
+Остальные языковые инструменты устанавливаются через **Mason**. `sudo npm` и установка Python-пакетов в системное окружение не используются. TypeScript-компилятор доступен глобально для пользователя; проекты должны закреплять собственную версию TypeScript в зависимостях.
 
 Включены дополнения:
 
@@ -63,7 +86,7 @@ Node.js и Go устанавливаются через **mise**, Rust — че�
 Скрипт:
 
 1. Устанавливает системные пакеты. **На Arch команда `pacman -Syu` также обновляет всю систему** — частичные обновления Arch не поддерживаются.
-2. Выбирает Go latest и Node.js LTS как глобальные версии mise для пользователя, Rust stable — как стандартную toolchain rustup. Уже настроенные менеджеры версий могут конфликтовать по `PATH`.
+2. Выбирает последние стабильные Go и Node.js Current как глобальные версии mise для пользователя, Rust stable — как стандартную toolchain rustup. Только с `--with-python` также выбирает новый Python в mise. Уже настроенные менеджеры версий могут конфликтовать по `PATH`.
 3. Устанавливает Neovim в `~/.local/opt/nvim`, ссылку — в `~/.local/bin/nvim`. Системный `/usr/bin/nvim` не меняется, но новая версия получает приоритет в `PATH`.
 4. Перемещает старые каталоги Neovim в соседние каталоги с суффиксом `.bak-ДАТА-ВРЕМЯ-PID`:
    - `${XDG_CONFIG_HOME:-~/.config}/nvim`
@@ -184,12 +207,15 @@ export default [
 - Плагины: `:Lazy update`.
 - Mason-инструменты: `:Mason`, затем обновление выбранных пакетов. `:MasonUpdate` обновляет **реестр**, не сами пакеты.
 - Rust: `rustup update stable`.
-- Go / Node.js: `mise use --global go@latest node@lts`.
-- TypeScript / Tree-sitter CLI: `npm install --global --allow-scripts=tree-sitter-cli typescript tree-sitter-cli` (после смены Node.js глобальные npm-пакеты могут потребовать переустановки).
+- Go / Node.js: `mise use --global go@latest node@latest`.
+- Системный Python: обычное обновление пакетов дистрибутива. Для отдельно установленного через mise Python: `MISE_PYTHON_COMPILE=true PYTHON_BUILD_SKIP_MIRROR=1 MAKE_OPTS=-j2 mise use --global python@latest` (нужны библиотеки сборки).
+- TypeScript / Tree-sitter CLI: `npm install --global --registry=https://registry.npmjs.org --allow-scripts=tree-sitter-cli typescript@latest tree-sitter-cli` (после смены Node.js глобальные npm-пакеты могут потребовать переустановки).
 
 ## Результат тестирования и известные ограничения
 
-Установка и повторный запуск проверены в Ubuntu 24.04 x86_64; сборка тестовых проектов и подключение основных LSP прошли успешно. Fedora, Arch и aarch64 не проверялись.
+Оба режима — по умолчанию и `--with-python` — прошли полную установку и smoke-тесты в `linuxmintd/mint22-amd64` с пакетными репозиториями Mint 22 / Ubuntu Noble. Это контейнер для сборки пакетов на Ubuntu-базе, **не полноценная настольная установка Mint**. Определение `ID=linuxmint` дополнительно покрыто unit-тестом. Сборка проектов и подключение основных LSP прошли успешно; системный Python после установки отдельного Python не подменён.
+
+Первоначальная версия также проверена в Ubuntu 24.04 x86_64. Mint 21, полноценная LMDE, Fedora, Arch и aarch64 не проверялись; подробности — в [TESTING.md](TESTING.md).
 
 **Важно:** npm-аудит сообщил о ReDoS в цепочке зависимостей установленного ESLint language server. Подробности, границы проверки и остальные результаты находятся в [TESTING.md](TESTING.md). Скрипт не выполняет небезопасное автоматическое исправление через `npm audit fix --force`.
 
@@ -199,12 +225,15 @@ export default [
 bash -n install.sh
 bash -n tests/smoke.sh
 shellcheck install.sh tests/smoke.sh
+python3 tests/upstream_versions.py
 ```
 
 После установки можно выполнить:
 
 ```bash
 bash tests/smoke.sh
+# Если установщик был запущен с --with-python:
+bash tests/smoke.sh --with-python
 ```
 
 Тест создаёт временные проекты, проверяет Rust/Go/TypeScript/C/C++ сборку, Python venv и компиляцию байткода, а также инициализацию языковых серверов Rust, Go, Python и TypeScript в Neovim. TS-проверка скачивает локальную зависимость `typescript` из npm. Временные проекты удаляются после проверки.

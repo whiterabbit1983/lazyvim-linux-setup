@@ -4,15 +4,21 @@ set -Eeuo pipefail
 trap 'printf "\nERROR at line %s. Installation stopped; backups were not deleted.\n" "$LINENO" >&2' ERR
 
 usage() {
-  printf 'Usage: bash install.sh [--yes]\nSupported: Debian/Ubuntu, Fedora, Arch; x86_64/aarch64; Bash/Zsh.\n'
+  printf 'Usage: bash install.sh [--yes] [--with-python]\n'
+  printf 'Default: use existing Python. --with-python builds latest stable Python from python.org.\n'
+  printf 'Supported: Linux Mint, Debian/Ubuntu, Fedora, Arch; x86_64/aarch64; Bash/Zsh.\n'
 }
-case "${1:-}" in
-  --help|-h) usage; exit 0 ;;
-  --yes) assume_yes=1 ;;
-  "") assume_yes=0 ;;
-  *) usage >&2; exit 2 ;;
-esac
-[[ $# -le 1 ]] || { usage >&2; exit 2; }
+assume_yes=0
+install_python=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --help|-h) usage; exit 0 ;;
+    --yes) assume_yes=1 ;;
+    --with-python) install_python=1 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
 [[ $(uname -s) == Linux ]] || { echo 'Linux is required.' >&2; exit 1; }
 [[ $EUID -ne 0 ]] || { echo 'Run without sudo; the script uses sudo for system packages only.' >&2; exit 1; }
 [[ ${NVIM_APPNAME:-nvim} == nvim ]] || { echo 'Unset NVIM_APPNAME first.' >&2; exit 1; }
@@ -24,18 +30,23 @@ esac
 # shellcheck disable=SC1091
 source /etc/os-release
 case " $ID ${ID_LIKE:-} " in
-  *' debian '*|*' ubuntu '*) distro=debian ;;
+  *' linuxmint '*|*' debian '*|*' ubuntu '*) distro=debian ;;
   *' fedora '*) distro=fedora ;;
   *' arch '*) distro=arch ;;
   *) echo "Unsupported distribution: $ID" >&2; exit 1 ;;
 esac
 printf '%s\n' \
   'This installs system dependencies and downloads software from official upstreams.' \
-  'It sets user defaults to Rust stable, Go latest and Node.js LTS.' \
+  'It selects the latest stable Rust, Go and Node.js (Current, not LTS).' \
+  'Python is NOT replaced by default. C/C++ remain distro packages.' \
   'Existing Neovim configuration/data/cache/state will be MOVED to .bak-* paths.' \
   'It adds one environment-file source line to ~/.bashrc and ~/.zshrc.' \
   'Re-running creates a fresh LazyVim configuration, not an in-place update.' \
   'On Arch, pacman -Syu also upgrades the entire system.'
+if [[ $install_python == 1 ]]; then
+  printf '%s\n' '--with-python: compile latest stable Python from python.org (can take several minutes).'
+  printf '%s\n' 'The user default changes, but /usr/bin/python3 is not replaced.'
+fi
 if [[ $assume_yes == 0 ]]; then
   read -r -p 'Continue? [y/N] ' answer
   [[ $answer == y || $answer == Y ]] || exit 0
@@ -61,6 +72,20 @@ case "$distro" in
       base-devel openssl python python-pip ripgrep fd xclip
     ;;
 esac
+if [[ $install_python == 1 ]]; then
+  case "$distro" in
+    debian)
+      sudo apt-get install -y zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
+        libffi-dev liblzma-dev libncurses-dev libgdbm-dev libgdbm-compat-dev \
+        tk-dev uuid-dev libzstd-dev ;;
+    fedora)
+      sudo dnf install -y zlib-devel bzip2-devel readline-devel sqlite-devel \
+        libffi-devel xz-devel ncurses-devel gdbm-devel tk-devel libuuid-devel libzstd-devel ;;
+    arch)
+      sudo pacman -S --needed --noconfirm zlib bzip2 readline sqlite libffi \
+        ncurses gdbm tk util-linux-libs zstd ;;
+  esac
+fi
 if [[ -n ${WAYLAND_DISPLAY:-} ]]; then
   case "$distro" in
     debian) sudo apt-get install -y wl-clipboard ;;
@@ -110,19 +135,68 @@ fi
 cd "$tmp"
 fetch https://mise.jdx.dev/install.sh "$tmp/mise-install.sh"
 MISE_INSTALL_PATH="$HOME/.local/bin/mise" sh "$tmp/mise-install.sh"
-mise use --global node@lts go@latest
+# Resolve versions from official upstreams, not the distro or a cached version list.
+fetch https://nodejs.org/dist/index.json "$tmp/node-index.json"
+fetch 'https://go.dev/dl/?mode=json' "$tmp/go-index.json"
+if [[ $install_python == 1 ]]; then
+  fetch https://www.python.org/downloads/source/ "$tmp/python-source.html"
+fi
+/usr/bin/python3 - "$tmp" "$install_python" > "$tmp/upstream-versions" <<'PYVERSIONS'
+import json
+import pathlib
+import re
+import sys
+root = pathlib.Path(sys.argv[1])
+def newest(versions):
+    if not versions:
+        raise SystemExit("No stable release found in upstream metadata.")
+    return max(versions, key=lambda v: tuple(map(int, v.split("."))))
+nodes = json.loads((root / "node-index.json").read_text())
+gos = json.loads((root / "go-index.json").read_text())
+node = newest([v["version"][1:] for v in nodes
+               if re.fullmatch(r"v\d+\.\d+\.\d+", v["version"])])
+go = newest([v["version"][2:] for v in gos if v.get("stable")
+             and re.fullmatch(r"go\d+\.\d+(?:\.\d+)?", v["version"])])
+python_version = "-"
+if sys.argv[2] == "1":
+    python = re.search(r"Latest Python 3 Release - Python (3\.\d+\.\d+)\s*<",
+                       (root / "python-source.html").read_text())
+    if not python:
+        raise SystemExit("python.org layout changed; cannot determine latest stable Python.")
+    python_version = python.group(1)
+print(node, go, python_version)
+PYVERSIONS
+read -r node_version go_version python_version < "$tmp/upstream-versions"
+printf 'Official stable releases: Node %s, Go %s\n' "$node_version" "$go_version"
+mise use --global "node@$node_version" "go@$go_version"
+if [[ $install_python == 1 ]]; then
+  printf 'Official stable Python: %s\n' "$python_version"
+  # python-build uses python.org sources instead of standalone builds/mirrors.
+  # Limit compilation to 2 jobs by default to avoid exhausting memory.
+  build_jobs="${PYTHON_BUILD_JOBS:-2}"
+  [[ $build_jobs =~ ^[1-9][0-9]*$ ]] || { echo 'PYTHON_BUILD_JOBS must be a positive integer.' >&2; exit 1; }
+  MISE_PYTHON_COMPILE=true PYTHON_BUILD_SKIP_MIRROR=1 MAKE_OPTS="-j$build_jobs" \
+    mise use --global "python@$python_version"
+fi
 mise reshim
 node --version
 npm --version
 go version
-# TypeScript compiler + the CLI required by newer nvim-treesitter versions.
-npm install --global --allow-scripts=tree-sitter-cli typescript tree-sitter-cli
+python3 --version
+if [[ $install_python == 1 ]]; then
+  python3 -c 'import ssl, sqlite3, bz2, lzma, ctypes, readline, zlib, tkinter; import compression.zstd'
+fi
+python3 -m pip --version
+# TypeScript's official stable npm tag; no nightly/next releases.
+npm install --global --registry=https://registry.npmjs.org \
+  --allow-scripts=tree-sitter-cli typescript@latest tree-sitter-cli
 
 if ! command -v rustup >/dev/null; then
   fetch https://sh.rustup.rs "$tmp/rustup-install.sh"
   sh "$tmp/rustup-install.sh" -y --no-modify-path --profile minimal --default-toolchain stable
 fi
 rustup toolchain install stable --profile minimal
+rustup update stable
 rustup default stable
 rustup component add --toolchain stable rust-analyzer rustfmt clippy
 

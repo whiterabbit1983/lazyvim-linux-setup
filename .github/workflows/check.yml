@@ -15,3 +15,5 @@ jobs:
           bash -n tests/smoke.sh
       - name: ShellCheck
         run: shellcheck install.sh tests/smoke.sh
+      - name: Upstream version selection and Linux Mint detection
+        run: python3 tests/upstream_versions.py
