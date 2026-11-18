@@ -1,6 +1,9 @@
 return {
   {
     "tpope/vim-fugitive",
+    init = function()
+      require("config.git_repos").setup()
+    end,
     cmd = { "Git", "G", "Gdiffsplit", "Gvdiffsplit", "Gedit", "Gread", "Gwrite", "Gclog" },
     keys = {
       { "<leader>gFs", "<cmd>Git<cr>", desc = "Git Status (Fugitive)" },
@@ -8,6 +11,9 @@ return {
       { "<leader>gFd", "<cmd>Gvdiffsplit<cr>", desc = "Git Diff vs Index (Fugitive)" },
       { "<leader>gFb", "<cmd>Git blame<cr>", desc = "Git Blame (Fugitive)" },
       { "<leader>gFl", "<cmd>Git log --oneline --decorate -50<cr>", desc = "Git Log (Fugitive)" },
+      { "<leader>gFa", "<cmd>GitRepos<cr>", desc = "Repository Overview (Local)" },
+      { "<leader>gFu", "<cmd>GitReposFetch<cr>", desc = "Fetch Upstreams and Refresh Overview" },
+      { "<leader>gFr", "<cmd>GitReposRoots<cr>", desc = "Configure Repository Folders" },
     },
   },
   {

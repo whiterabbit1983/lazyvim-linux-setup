@@ -1,4 +1,4 @@
-name: Shell checks
+name: Installer and Git checks
 on:
   push:
   pull_request:
@@ -14,7 +14,20 @@ jobs:
           bash -n install.sh
           bash -n tests/smoke.sh
           bash -n tests/git-smoke.sh
+          bash -n tests/repos-smoke.sh
       - name: ShellCheck
-        run: shellcheck install.sh tests/smoke.sh tests/git-smoke.sh
+        run: shellcheck install.sh tests/smoke.sh tests/git-smoke.sh tests/repos-smoke.sh
       - name: Upstream versions, Linux Mint detection and Git installation
         run: python3 tests/upstream_versions.py
+  neovim-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install official stable Neovim
+        run: |
+          curl -fsSL --retry 3 https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.tar.gz -o "$RUNNER_TEMP/nvim.tar.gz"
+          tar -xzf "$RUNNER_TEMP/nvim.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+      - name: Repository dashboard with temporary local remotes
+        run: bash tests/repos-smoke.sh

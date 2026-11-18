@@ -4,8 +4,11 @@ end
 
 local function run()
   local file = vim.api.nvim_buf_get_name(0)
-  for _, suffix in ipairs({ "s", "c", "d", "b", "l", "t" }) do
+  for _, suffix in ipairs({ "s", "c", "d", "b", "l", "t", "a", "u", "r" }) do
     assert(vim.fn.maparg(" gF" .. suffix, "n") ~= "", "Missing Git keymap: " .. suffix)
+  end
+  for _, command in ipairs({ "GitRepos", "GitReposFetch", "GitReposRoots" }) do
+    assert(vim.fn.exists(":" .. command) == 2, "Missing dashboard command: " .. command)
   end
   wait_for("Gitsigns hunk", function()
     local ok, gs = pcall(require, "gitsigns")
@@ -64,6 +67,29 @@ local function run()
     end
     return false
   end)
+
+  -- Override roots in memory only. Do not create or change the user's settings.
+  local dashboard = require("config.git_repos")
+  local load_config = dashboard.load_config
+  local root = vim.fn.fnamemodify(file, ":h")
+  dashboard.load_config = function()
+    return { roots = { root }, max_depth = 0, max_repos = 10, max_dirs = 10 }
+  end
+  vim.cmd("GitRepos")
+  wait_for("repository dashboard in LazyVim", function()
+    return vim.bo.filetype == "gitrepos"
+      and table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"):find("Ready:", 1, true)
+  end)
+  dashboard.load_config = load_config
+  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  assert(table.concat(lines, "\n"):find("[DIRTY | NO UPSTREAM]", 1, true), "Incorrect dashboard state")
+  for i, line in ipairs(lines) do
+    if line:find(root, 1, true) then vim.api.nvim_win_set_cursor(0, { i, 0 }); break end
+  end
+  vim.fn.maparg("<CR>", "n", false, true).callback()
+  wait_for("dashboard opens Fugitive", function()
+    return vim.bo.filetype == "fugitive" and vim.fn.getcwd() == root
+  end)
 end
 
 local ok, err = xpcall(run, debug.traceback)
@@ -71,6 +97,6 @@ if not ok then
   vim.api.nvim_err_writeln(err)
   vim.cmd("cquit 1")
 else
-  print("PASS: Fugitive and Gitsigns integration")
+  print("PASS: Fugitive, Gitsigns and repository dashboard integration")
   vim.cmd("qa!")
 end

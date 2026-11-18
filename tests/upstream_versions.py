@@ -90,6 +90,11 @@ class GitInstall(unittest.TestCase):
         standalone = (Path(__file__).resolve().parents[1] / "config/git.lua").read_text()
         self.assertEqual(embedded.strip(), standalone.strip())
 
+    def test_standalone_dashboard_matches_installer(self):
+        embedded = SCRIPT.split("<<'GITREPOSLUA'\n", 1)[1].split("\nGITREPOSLUA", 1)[0]
+        standalone = (Path(__file__).resolve().parents[1] / "config/git_repos.lua").read_text()
+        self.assertEqual(embedded.strip(), standalone.strip())
+
     def check_git(self, distro, present):
         block = SCRIPT.split("# BEGIN ENSURE_GIT\n", 1)[1].split("# END ENSURE_GIT", 1)[0]
         mock = r'''
