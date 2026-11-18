@@ -57,21 +57,34 @@ sudo -v
 case "$distro" in
   debian)
     sudo apt-get update
-    sudo apt-get install -y git curl ca-certificates unzip tar gzip xz-utils \
+    sudo apt-get install -y curl ca-certificates unzip tar gzip xz-utils \
       build-essential pkg-config libssl-dev python3 python3-venv python3-pip \
       ripgrep fd-find xclip
     ;;
   fedora)
-    sudo dnf install -y git curl ca-certificates unzip tar gzip xz \
+    sudo dnf install -y curl ca-certificates unzip tar gzip xz \
       gcc gcc-c++ make pkgconf-pkg-config openssl-devel python3 python3-pip \
       ripgrep fd-find xclip
     ;;
   arch)
     # A full upgrade is necessary on Arch: partial upgrades are unsupported.
-    sudo pacman -Syu --needed --noconfirm git curl ca-certificates unzip tar gzip xz \
+    sudo pacman -Syu --needed --noconfirm curl ca-certificates unzip tar gzip xz \
       base-devel openssl python python-pip ripgrep fd xclip
     ;;
 esac
+# BEGIN ENSURE_GIT
+if ! command -v git >/dev/null 2>&1; then
+  printf 'Git is missing; installing the distribution package.\n'
+  case "$distro" in
+    debian) sudo apt-get install -y git ;;
+    fedora) sudo dnf install -y git ;;
+    arch) sudo pacman -S --needed --noconfirm git ;;
+  esac
+else
+  printf 'Using existing Git: %s\n' "$(command -v git)"
+fi
+git --version
+# END ENSURE_GIT
 if [[ $install_python == 1 ]]; then
   case "$distro" in
     debian)
@@ -251,6 +264,40 @@ return {
   },
 }
 LUA
+
+cat > "$XDG_CONFIG_HOME/nvim/lua/plugins/git.lua" <<'GITLUA'
+return {
+  {
+    "tpope/vim-fugitive",
+    cmd = { "Git", "G", "Gdiffsplit", "Gvdiffsplit", "Gedit", "Gread", "Gwrite", "Gclog" },
+    keys = {
+      { "<leader>gFs", "<cmd>Git<cr>", desc = "Git Status (Fugitive)" },
+      { "<leader>gFc", "<cmd>Git commit<cr>", desc = "Git Commit (Fugitive)" },
+      { "<leader>gFd", "<cmd>Gvdiffsplit<cr>", desc = "Git Diff vs Index (Fugitive)" },
+      { "<leader>gFb", "<cmd>Git blame<cr>", desc = "Git Blame (Fugitive)" },
+      { "<leader>gFl", "<cmd>Git log --oneline --decorate -50<cr>", desc = "Git Log (Fugitive)" },
+    },
+  },
+  {
+    "lewis6991/gitsigns.nvim",
+    opts = {
+      signcolumn = true,
+      numhl = false,
+      linehl = false,
+      current_line_blame = false,
+      current_line_blame_opts = { delay = 400, virt_text_pos = "eol" },
+    },
+    keys = {
+      { "<leader>gFt", "<cmd>Gitsigns toggle_current_line_blame<cr>", desc = "Toggle Git Line Blame" },
+    },
+  },
+  {
+    "folke/which-key.nvim",
+    optional = true,
+    opts = { spec = { { "<leader>gF", group = "Fugitive" } } },
+  },
+}
+GITLUA
 
 cat > "$XDG_CONFIG_HOME/nvim/lua/plugins/install-guard.lua" <<'LUA'
 -- Only the installer's bootstrap uses this flag; normal sessions are unchanged.

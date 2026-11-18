@@ -84,5 +84,52 @@ class UpstreamVersions(unittest.TestCase):
                 self.assertEqual(result.stdout, "debian")
 
 
+class GitInstall(unittest.TestCase):
+    def test_standalone_git_config_matches_installer(self):
+        embedded = SCRIPT.split("<<'GITLUA'\n", 1)[1].split("\nGITLUA", 1)[0]
+        standalone = (Path(__file__).resolve().parents[1] / "config/git.lua").read_text()
+        self.assertEqual(embedded.strip(), standalone.strip())
+
+    def check_git(self, distro, present):
+        block = SCRIPT.split("# BEGIN ENSURE_GIT\n", 1)[1].split("# END ENSURE_GIT", 1)[0]
+        mock = r'''
+set -e
+distro="$1"
+present="$2"
+command() {
+  if [[ "$*" == '-v git' ]]; then
+    [[ "$present" == 1 ]] || return 1
+    printf '/existing/git\n'
+  else
+    builtin command "$@"
+  fi
+}
+sudo() { printf 'INSTALL: %s\n' "$*"; }
+git() { printf 'git version test\n'; }
+'''
+        result = subprocess.run(
+            ["bash", "-c", mock + block, "test", distro, str(int(present))],
+            text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_existing_git_skips_package_installation(self):
+        for distro in ("debian", "fedora", "arch"):
+            with self.subTest(distro=distro):
+                output = self.check_git(distro, present=True)
+                self.assertNotIn("INSTALL:", output)
+                self.assertIn("Using existing Git", output)
+
+    def test_missing_git_uses_correct_package_manager(self):
+        for distro, command in (("debian", "apt-get install -y git"),
+                                ("fedora", "dnf install -y git"),
+                                ("arch", "pacman -S --needed --noconfirm git")):
+            with self.subTest(distro=distro):
+                output = self.check_git(distro, present=False)
+                self.assertIn("INSTALL: " + command, output)
+                self.assertIn("git version test", output)
+
+
 if __name__ == "__main__":
     unittest.main()

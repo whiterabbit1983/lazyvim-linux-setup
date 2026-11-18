@@ -53,4 +53,5 @@ cc main.c -o c-smoke
 printf 'int main() { return 0; }\n' > main.cpp
 c++ main.cpp -o cpp-smoke
 ./cpp-smoke
-printf '\nPASS: Rust, Go, Python, TypeScript, C/C++ and the expected LSP clients.\n'
+bash "$(dirname -- "$LAZYVIM_SMOKE_LUA")/git-smoke.sh"
+printf '\nPASS: Rust, Go, Python, TypeScript, C/C++, Git and the expected LSP clients.\n'

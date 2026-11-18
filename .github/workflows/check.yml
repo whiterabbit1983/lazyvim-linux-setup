@@ -13,7 +13,8 @@ jobs:
         run: |
           bash -n install.sh
           bash -n tests/smoke.sh
+          bash -n tests/git-smoke.sh
       - name: ShellCheck
-        run: shellcheck install.sh tests/smoke.sh
-      - name: Upstream version selection and Linux Mint detection
+        run: shellcheck install.sh tests/smoke.sh tests/git-smoke.sh
+      - name: Upstream versions, Linux Mint detection and Git installation
         run: python3 tests/upstream_versions.py
