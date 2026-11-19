@@ -252,6 +252,18 @@ cat >> "$XDG_CONFIG_HOME/nvim/lua/config/options.lua" <<'LUA'
 vim.g.lazyvim_python_lsp = "basedpyright"
 vim.g.autoformat = true
 LUA
+cat >> "$XDG_CONFIG_HOME/nvim/lua/config/autocmds.lua" <<'LUA'
+
+vim.api.nvim_create_autocmd("TextYankPost", {
+  group = vim.api.nvim_create_augroup("Osc52Yank", { clear = true }),
+  callback = function()
+    if vim.v.event.operator == "y" then
+      local text = table.concat(vim.v.event.regcontents, "\n")
+      vim.fn.chansend(vim.v.stderr, "\x1b]52;c;" .. vim.base64.encode(text) .. "\x07")
+    end
+  end,
+})
+LUA
 cat > "$XDG_CONFIG_HOME/nvim/lua/plugins/python-format.lua" <<'LUA'
 return {
   {
